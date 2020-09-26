@@ -2,78 +2,41 @@
 
 Aggregate queries which touch large swathes of time-series data can
 take a long time to compute because the system needs to scan large
-amounts of data on every query execution. TimescaleDB continuous
-aggregates automatically calculate the results of a query in the
-background and materialize the results. Queries to the continuous
-aggregate view are then significantly faster as they touch less raw
-data in the hypertable and instead mostly use the pre-computed
-aggregates to build the view.
+amounts of data on every query execution. To make such queries faster,
+continuous aggregates allows pre-computing (or materializing) the
+aggregates, while also providing means to continuously, and without
+much overhead, keep them up-to-date as the underlying source data
+changes.
 
-Continuous aggregates are somewhat similar to PostgreSQL [materialized
-views][postgres-materialized-views], but unlike a materialized view,
-continuous aggregates do not need to be refreshed manually; the view
-will be refreshed automatically in the background as new data is
-added, or old data is modified. Additionally, it does not need to
-re-calculate all of the data on every refresh. Only new and/or
-invalidated data will be calculated.  Since this re-aggregation is
-automatic, it doesn’t add any maintenance burden to your database.
-
-**How it Works:** A *materialization background job* regularly takes
-raw data from the hypertable and computes a partial aggregate that it
-stores (materializes) in the continuous aggregate.
-So whenever new data is inserted, updated, or deleted in the hypertable, the
-continuous aggregate will automatically decide what data needs to be
-re-materialized, and it schedules a re-materialization to happen the next time
-the background job runs. This way, the materalization is kept mostly
-up-to-date to the raw data (and the recency and frequency of these tasks
-are fully configurable; more below).
-
-### Real-Time Aggregates [](real-time-aggregates)
-
-Real-time aggregates are a capability (first introduced in TimescaleDB 1.7)
-whereby querying the *continuous aggregate view* will then compute
-fully up-to-date aggregate results by combining the materialized
-partial aggregate with recent data from the hypertable that has yet to
-be materialized by the continuous aggregate. By combining raw and
-materialized data in this way, one gets accurate and up-to-date
-results while still enjoying the speedups of pre-computing a large
+Continuous aggregates are somewhat similar to PostgreSQL's
+[materialized views][postgres-materialized-views], but unlike a
+materialized view, continuous aggregates can be updated continuously
+and incrementally, either by manual refreshing or via a policy that
+runs in the background. A refresh can cover the entire aggregate or
+just a specific time range. In either case the refresh only recomputes
+the parts of the aggregate that has changed since the last refresh.
+ 
+As of TimescaleDB 1.7, continuous aggregates can also do *real-time
+aggregation* where it combines the materialized aggregates with raw
+data from the hypertable that has yet to be materialized. By combining
+raw and materialized data, queries that use real-time aggregation
+always show recent data, while still avoiding pre-computing a large
 portion of the result.
 
-As an example, continuous aggregates _without_ this real-time capability make
-it really fast to get aggregate answers by precomputing these values (such as
-the min/max/average value over each hour). This way, if you are collecting raw
-data every second, querying hourly data over the past week means reading 24 x 7
-= 168 values from the database, as opposed to processing 60 x 60 x 24 x 7 =
-604,800 values at query time.
+Note that real-time aggregation is the default behavior for new
+continuous aggregates, although it is possible to [turn this
+functionality off][api-continuous-aggs-with-options] so that only
+materialized data is queried.
 
-But this type of continuous aggregate does not incorporate the very
-latest data, _i.e._, since the last time the asynchronous aggregation job ran
-inside the database. So if you are generating hourly rollups, you might only
-run this materialization job every hour.
+>:TIP: To use real-time aggregation with a continuous aggregate
+created prior to TimescaleDB 1.7, ALTER the view to set
+`timescaledb.materialized_only=false`.  All subsequent queries to the
+view will immediately use the real-time aggregate feature.
 
-With real-time aggregates, a single, simple query will combine your
-pre-computed hourly rollups with the raw data from the last
-hour, to always give you an up-to-date answer.  Now, instead of touching
-604,800 rows of raw data, the query reads 167 pre-computed rows of
-hourly data and 3600 rows of raw secondly data, leading to significant
-performance improvements.
+---
 
-Real-time aggregates are now the default behavior for any continuous aggregates.
-To revert to previous behavior, in which the query touches materialized data only
-and doesn't combine with the latest raw data, add the following parameter when
-creating the continuous aggregate view:
+### Use Cases
 
-```
-timescaledb.materialized_only=true
-```
-
-You can also use this in conjunction with the ALTER VIEW to turn this feature
-on or off at any time.
-
->:TIP: To upgrade continuous aggregates that were created in a version earlier than
-TimescaleDB 1.7 to use real-time aggregates, ALTER the view to
-set `timescaledb.materialized_only=false`.  All subsequent queries
-to the view will immediately use the real-time aggregate feature.
 
 ---
 
@@ -563,6 +526,7 @@ implement a number of these aggregates.
 [pg-func-stable]: https://www.postgresql.org/docs/current/static/sql-createfunction.html
 [time-bucket]: /api#time_bucket
 [api-continuous-aggs-create]: /api#continuous_aggregate-create_view
+[api-continuous-aggs-with-options]: /api#continuous_aggregate-create_view-with-optional
 [postgres-parallel-agg]:https://www.postgresql.org/docs/current/parallel-plans.html#PARALLEL-AGGREGATION
 [api-refresh-continuous-aggs]: /api#continuous_aggregate-refresh_view
 [api-continuous-aggregates-info]: /api#timescaledb_information-continuous_aggregate

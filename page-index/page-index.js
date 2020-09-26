@@ -382,11 +382,7 @@ const pageIndex = [
                 type: PAGE,
                 href: "continuous-aggregates",
                 children: [
-                    {
-                        Title: "Real-Time Aggregates",
-                        type: ANCHOR,
-                        href: "#real-time-aggregates"
-                    }, {
+					{
                         Title: "Creating a Continuous Aggregate View",
                         type: ANCHOR,
                         href: "#create"
